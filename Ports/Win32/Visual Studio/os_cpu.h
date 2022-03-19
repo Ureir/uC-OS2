@@ -63,7 +63,7 @@ typedef  CPU_SR         OS_CPU_SR;                                      /* Defin
 *********************************************************************************************************
 */
 
-#define  OS_CRITICAL_METHOD     3u
+#define  OS_CRITICAL_METHOD     CPU_CFG_CRITICAL_METHOD
 
 #define  OS_ENTER_CRITICAL()  { CPU_CRITICAL_ENTER(); }
 #define  OS_EXIT_CRITICAL()   { CPU_CRITICAL_EXIT();  }
