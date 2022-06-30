@@ -63,7 +63,7 @@ typedef  CPU_SR         OS_CPU_SR;                                      /* Defin
 *********************************************************************************************************
 */
 
-#define  OS_CRITICAL_METHOD     3u
+#define  OS_CRITICAL_METHOD     CPU_CFG_CRITICAL_METHOD
 
 #define  OS_ENTER_CRITICAL()  { CPU_CRITICAL_ENTER(); }
 #define  OS_EXIT_CRITICAL()   { CPU_CRITICAL_EXIT();  }
@@ -73,6 +73,18 @@ typedef  CPU_SR         OS_CPU_SR;                                      /* Defin
 *                                          Miscellaneous
 **********************************************************************************************************
 */
+
+#ifdef CPU_NB_CORES
+#define  OS_NB_CORES            CPU_NB_CORES                            /* Multicore target support                                 */
+#define  OS_MULTICORE           (CPU_NB_CORES > 1)
+#define  OS_CORENUM()           (CPU_CORENUM())
+#define  OS_PAUSE()             { CPU_PAUSE(); }
+#define  OS_START(cpu)          { CPU_START(cpu); }
+#else
+#define  OS_NB_CORES            1                                       /* Old single core support                                  */
+#define  OS_MULTICORE           (0)
+#define  OS_CORENUM()           (0)
+#endif
 
 #define  OS_STK_GROWTH          1u                                      /* Stack grows from HIGH to LOW memory on WIN32             */
 

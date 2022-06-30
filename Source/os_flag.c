@@ -623,6 +623,7 @@ OS_FLAGS  OSFlagPend (OS_FLAG_GRP  *pgrp,
                       INT32U        timeout,
                       INT8U        *perr)
 {
+    OS_TCB       *ptcb;
     OS_FLAG_NODE  node;
     OS_FLAGS      flags_rdy;
     INT8U         result;
@@ -673,6 +674,7 @@ OS_FLAGS  OSFlagPend (OS_FLAG_GRP  *pgrp,
     }
 
     OS_ENTER_CRITICAL();
+    ptcb = OSTCBCur[OS_CORENUM()];
     switch (wait_type) {
         case OS_FLAG_WAIT_SET_ALL:                         /* See if all required flags are set        */
              flags_rdy = (OS_FLAGS)(pgrp->OSFlagFlags & flags);   /* Extract only the bits we want     */
@@ -680,9 +682,9 @@ OS_FLAGS  OSFlagPend (OS_FLAG_GRP  *pgrp,
                  if (consume == OS_TRUE) {                 /* See if we need to consume the flags      */
                      pgrp->OSFlagFlags &= (OS_FLAGS)~flags_rdy;   /* Clear ONLY the flags we wanted    */
                  }
-                 OSTCBCur->OSTCBFlagsRdy = flags_rdy;      /* Save flags that were ready               */
+                 ptcb->OSTCBFlagsRdy = flags_rdy;          /* Save flags that were ready               */
                  OS_EXIT_CRITICAL();                       /* Yes, condition met, return to caller     */
-                 *perr                   = OS_ERR_NONE;
+                 *perr               = OS_ERR_NONE;
                  OS_TRACE_FLAG_PEND_EXIT(*perr);
                  return (flags_rdy);
              } else {                                      /* Block task until events occur or timeout */
@@ -697,9 +699,9 @@ OS_FLAGS  OSFlagPend (OS_FLAG_GRP  *pgrp,
                  if (consume == OS_TRUE) {                 /* See if we need to consume the flags      */
                      pgrp->OSFlagFlags &= (OS_FLAGS)~flags_rdy;    /* Clear ONLY the flags that we got */
                  }
-                 OSTCBCur->OSTCBFlagsRdy = flags_rdy;      /* Save flags that were ready               */
+                 ptcb->OSTCBFlagsRdy = flags_rdy;          /* Save flags that were ready               */
                  OS_EXIT_CRITICAL();                       /* Yes, condition met, return to caller     */
-                 *perr                   = OS_ERR_NONE;
+                 *perr               = OS_ERR_NONE;
                  OS_TRACE_FLAG_PEND_EXIT(*perr);
                  return (flags_rdy);
              } else {                                      /* Block task until events occur or timeout */
@@ -715,7 +717,7 @@ OS_FLAGS  OSFlagPend (OS_FLAG_GRP  *pgrp,
                  if (consume == OS_TRUE) {                 /* See if we need to consume the flags      */
                      pgrp->OSFlagFlags |= flags_rdy;       /* Set ONLY the flags that we wanted        */
                  }
-                 OSTCBCur->OSTCBFlagsRdy = flags_rdy;      /* Save flags that were ready               */
+                 ptcb->OSTCBFlagsRdy     = flags_rdy;      /* Save flags that were ready               */
                  OS_EXIT_CRITICAL();                       /* Yes, condition met, return to caller     */
                  *perr                   = OS_ERR_NONE;
                  OS_TRACE_FLAG_PEND_EXIT(*perr);
@@ -732,9 +734,9 @@ OS_FLAGS  OSFlagPend (OS_FLAG_GRP  *pgrp,
                  if (consume == OS_TRUE) {                 /* See if we need to consume the flags      */
                      pgrp->OSFlagFlags |= flags_rdy;       /* Set ONLY the flags that we got           */
                  }
-                 OSTCBCur->OSTCBFlagsRdy = flags_rdy;      /* Save flags that were ready               */
+                 ptcb->OSTCBFlagsRdy = flags_rdy;          /* Save flags that were ready               */
                  OS_EXIT_CRITICAL();                       /* Yes, condition met, return to caller     */
-                 *perr                   = OS_ERR_NONE;
+                 *perr               = OS_ERR_NONE;
                  OS_TRACE_FLAG_PEND_EXIT(*perr);
                  return (flags_rdy);
              } else {                                      /* Block task until events occur or timeout */
@@ -754,11 +756,11 @@ OS_FLAGS  OSFlagPend (OS_FLAG_GRP  *pgrp,
 
     OS_Sched();                                            /* Find next HPT ready to run               */
     OS_ENTER_CRITICAL();
-    if (OSTCBCur->OSTCBStatPend != OS_STAT_PEND_OK) {      /* Have we timed-out or aborted?            */
-        pend_stat                = OSTCBCur->OSTCBStatPend;
-        OSTCBCur->OSTCBStatPend  = OS_STAT_PEND_OK;
+    if (ptcb->OSTCBStatPend != OS_STAT_PEND_OK) {          /* Have we timed-out or aborted?            */
+        pend_stat            = ptcb->OSTCBStatPend;
+        ptcb->OSTCBStatPend  = OS_STAT_PEND_OK;
         OS_FlagUnlink(&node);
-        OSTCBCur->OSTCBStat      = OS_STAT_RDY;            /* Yes, make task ready-to-run              */
+        ptcb->OSTCBStat      = OS_STAT_RDY;                /* Yes, make task ready-to-run              */
         OS_EXIT_CRITICAL();
         flags_rdy                = (OS_FLAGS)0;
         switch (pend_stat) {
@@ -774,7 +776,7 @@ OS_FLAGS  OSFlagPend (OS_FLAG_GRP  *pgrp,
         OS_TRACE_FLAG_PEND_EXIT(*perr);
         return (flags_rdy);
     }
-    flags_rdy = OSTCBCur->OSTCBFlagsRdy;
+    flags_rdy = ptcb->OSTCBFlagsRdy;
     if (consume == OS_TRUE) {                              /* See if we need to consume the flags      */
         switch (wait_type) {
             case OS_FLAG_WAIT_SET_ALL:
@@ -827,7 +829,7 @@ OS_FLAGS  OSFlagPendGetFlagsRdy (void)
 
 
     OS_ENTER_CRITICAL();
-    flags = OSTCBCur->OSTCBFlagsRdy;
+    flags = OSTCBCur[OS_CORENUM()]->OSTCBFlagsRdy;
     OS_EXIT_CRITICAL();
     return (flags);
 }
@@ -1094,18 +1096,20 @@ static  void  OS_FlagBlock (OS_FLAG_GRP  *pgrp,
                             INT32U        timeout)
 {
     OS_FLAG_NODE  *pnode_next;
+    OS_TCB        *ptcb;
     INT8U          y;
 
 
-    OSTCBCur->OSTCBStat      |= OS_STAT_FLAG;
-    OSTCBCur->OSTCBStatPend   = OS_STAT_PEND_OK;
-    OSTCBCur->OSTCBDly        = timeout;              /* Store timeout in task's TCB                   */
+    ptcb                      = OSTCBCur[OS_CORENUM()];
+    ptcb->OSTCBStat          |= OS_STAT_FLAG;
+    ptcb->OSTCBStatPend       = OS_STAT_PEND_OK;
+    ptcb->OSTCBDly            = timeout;              /* Store timeout in task's TCB                   */
 #if OS_TASK_DEL_EN > 0u
-    OSTCBCur->OSTCBFlagNode   = pnode;                /* TCB to link to node                           */
+    ptcb->OSTCBFlagNode       = pnode;                /* TCB to link to node                           */
 #endif
     pnode->OSFlagNodeFlags    = flags;                /* Save the flags that we need to wait for       */
     pnode->OSFlagNodeWaitType = wait_type;            /* Save the type of wait we are doing            */
-    pnode->OSFlagNodeTCB      = (void *)OSTCBCur;     /* Link to task's TCB                            */
+    pnode->OSFlagNodeTCB      = (void *)ptcb;         /* Link to task's TCB                            */
     pnode->OSFlagNodeNext     = pgrp->OSFlagWaitList; /* Add node at beginning of event flag wait list */
     pnode->OSFlagNodePrev     = (void *)0;
     pnode->OSFlagNodeFlagGrp  = (void *)pgrp;         /* Link to Event Flag Group                      */
@@ -1115,11 +1119,11 @@ static  void  OS_FlagBlock (OS_FLAG_GRP  *pgrp,
     }
     pgrp->OSFlagWaitList = (void *)pnode;
 
-    y            =  OSTCBCur->OSTCBY;                 /* Suspend current task until flag(s) received   */
-    OSRdyTbl[y] &= (OS_PRIO)~OSTCBCur->OSTCBBitX;
-    OS_TRACE_TASK_SUSPENDED(OSTCBCur);
+    y            =  ptcb->OSTCBY;                     /* Suspend current task until flag(s) received   */
+    OSRdyTbl[y] &= (OS_PRIO)~ptcb->OSTCBBitX;
+    OS_TRACE_TASK_SUSPENDED(ptcb);
     if (OSRdyTbl[y] == 0x00u) {
-        OSRdyGrp &= (OS_PRIO)~OSTCBCur->OSTCBBitY;
+        OSRdyGrp &= (OS_PRIO)~ptcb->OSTCBBitY;
     }
 }
 

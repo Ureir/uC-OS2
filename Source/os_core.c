@@ -325,6 +325,7 @@ INT16U  OSEventPendMulti (OS_EVENT  **pevents_pend,
 {
     OS_EVENT  **pevents;
     OS_EVENT   *pevent;
+    OS_TCB     *ptcb;
 #if ((OS_Q_EN > 0u) && (OS_MAX_QS > 0u))
     OS_Q       *pq;
 #endif
@@ -479,39 +480,39 @@ INT16U  OSEventPendMulti (OS_EVENT  **pevents_pend,
         return (events_rdy_nbr);
     }
 
-                                                        /* Otherwise, must wait until any event occurs */
-    OSTCBCur->OSTCBStat     |= events_stat  |           /* Resource not available, ...                 */
-                               OS_STAT_MULTI;           /* ... pend on multiple events                 */
-    OSTCBCur->OSTCBStatPend  = OS_STAT_PEND_OK;
-    OSTCBCur->OSTCBDly       = timeout;                 /* Store pend timeout in TCB                   */
+    ptcb                 = OSTCBCur[OS_CORENUM()];      /* Otherwise, must wait until any event occurs */
+    ptcb->OSTCBStat     |= events_stat  |               /* Resource not available, ...                 */
+                           OS_STAT_MULTI;               /* ... pend on multiple events                 */
+    ptcb->OSTCBStatPend  = OS_STAT_PEND_OK;
+    ptcb->OSTCBDly       = timeout;                     /* Store pend timeout in TCB                   */
     OS_EventTaskWaitMulti(pevents_pend);                /* Suspend task until events or timeout occurs */
 
     OS_EXIT_CRITICAL();
     OS_Sched();                                         /* Find next highest priority task ready       */
     OS_ENTER_CRITICAL();
 
-    switch (OSTCBCur->OSTCBStatPend) {                  /* Handle event posted, aborted, or timed-out  */
+    switch (ptcb->OSTCBStatPend) {                      /* Handle event posted, aborted, or timed-out  */
         case OS_STAT_PEND_OK:
         case OS_STAT_PEND_ABORT:
-             pevent = OSTCBCur->OSTCBEventMultiRdy;
+             pevent = ptcb->OSTCBEventMultiRdy;
              if (pevent != (OS_EVENT *)0) {             /* If task event ptr != NULL, ...              */
                 *pevents_rdy++   =  pevent;             /* ... return available event ...              */
                 *pevents_rdy     = (OS_EVENT *)0;       /* ... & NULL terminate return event array     */
                   events_rdy_nbr =  1;
 
              } else {                                   /* Else NO event available, handle as timeout  */
-                 OSTCBCur->OSTCBStatPend = OS_STAT_PEND_TO;
-                 OS_EventTaskRemoveMulti(OSTCBCur, pevents_pend);
+                 ptcb->OSTCBStatPend = OS_STAT_PEND_TO;
+                 OS_EventTaskRemoveMulti(ptcb, pevents_pend);
              }
              break;
 
         case OS_STAT_PEND_TO:                           /* If events timed out, ...                    */
         default:                                        /* ... remove task from events' wait lists     */
-             OS_EventTaskRemoveMulti(OSTCBCur, pevents_pend);
+             OS_EventTaskRemoveMulti(ptcb, pevents_pend);
              break;
     }
 
-    switch (OSTCBCur->OSTCBStatPend) {
+    switch (ptcb->OSTCBStatPend) {
         case OS_STAT_PEND_OK:
              switch (pevent->OSEventType) {             /* Return event's message                      */
 #if (OS_SEM_EN > 0u)
@@ -524,7 +525,7 @@ INT16U  OSEventPendMulti (OS_EVENT  **pevents_pend,
     ((OS_Q_EN    > 0u) && (OS_MAX_QS > 0u)))
                  case OS_EVENT_TYPE_MBOX:
                  case OS_EVENT_TYPE_Q:
-                     *pmsgs_rdy++ = (void *)OSTCBCur->OSTCBMsg;     /* Return received message         */
+                     *pmsgs_rdy++ = (void *)ptcb->OSTCBMsg;         /* Return received message         */
                       break;
 #endif
 
@@ -551,13 +552,13 @@ INT16U  OSEventPendMulti (OS_EVENT  **pevents_pend,
              break;
     }
 
-    OSTCBCur->OSTCBStat          =  OS_STAT_RDY;        /* Set   task  status to ready                 */
-    OSTCBCur->OSTCBStatPend      =  OS_STAT_PEND_OK;    /* Clear pend  status                          */
-    OSTCBCur->OSTCBEventMultiPtr = (OS_EVENT **)0;      /* Clear event pointers                        */
-    OSTCBCur->OSTCBEventMultiRdy = (OS_EVENT  *)0;
+    ptcb->OSTCBStat          =  OS_STAT_RDY;            /* Set   task  status to ready                 */
+    ptcb->OSTCBStatPend      =  OS_STAT_PEND_OK;        /* Clear pend  status                          */
+    ptcb->OSTCBEventMultiPtr = (OS_EVENT **)0;          /* Clear event pointers                        */
+    ptcb->OSTCBEventMultiRdy = (OS_EVENT  *)0;
 #if ((OS_MBOX_EN > 0u) ||                 \
     ((OS_Q_EN    > 0u) && (OS_MAX_QS > 0u)))
-    OSTCBCur->OSTCBMsg           = (void      *)0;      /* Clear task  message                         */
+    ptcb->OSTCBMsg           = (void      *)0;          /* Clear task  message                         */
 #endif
     OS_EXIT_CRITICAL();
 
@@ -870,9 +871,9 @@ void  OSStart (void)
 {
     if (OSRunning == OS_FALSE) {
         OS_SchedNew();                               /* Find highest priority's task priority number   */
-        OSPrioCur     = OSPrioHighRdy;
+        OSPrioCur[0]  = OSPrioHighRdy;
         OSTCBHighRdy  = OSTCBPrioTbl[OSPrioHighRdy]; /* Point to highest priority task ready to run    */
-        OSTCBCur      = OSTCBHighRdy;
+        OSTCBCur[0]      = OSTCBHighRdy;
         OSStartHighRdy();                            /* Execute target specific code to start task     */
     }
 }
@@ -1155,19 +1156,20 @@ INT8U  OS_EventTaskRdy (OS_EVENT  *pevent,
 #if (OS_EVENT_EN)
 void  OS_EventTaskWait (OS_EVENT *pevent)
 {
-    INT8U  y;
+    OS_TCB *ptcb;
+    INT8U   y;
 
+    ptcb                              = OSTCBCur[OS_CORENUM()];
+    ptcb->OSTCBEventPtr               = pevent;                     /* Store ptr to ECB in TCB         */
 
-    OSTCBCur->OSTCBEventPtr               = pevent;                 /* Store ptr to ECB in TCB         */
+    pevent->OSEventTbl[ptcb->OSTCBY] |= ptcb->OSTCBBitX;            /* Put task in waiting list        */
+    pevent->OSEventGrp               |= ptcb->OSTCBBitY;
 
-    pevent->OSEventTbl[OSTCBCur->OSTCBY] |= OSTCBCur->OSTCBBitX;    /* Put task in waiting list        */
-    pevent->OSEventGrp                   |= OSTCBCur->OSTCBBitY;
-
-    y             =  OSTCBCur->OSTCBY;            /* Task no longer ready                              */
-    OSRdyTbl[y]  &= (OS_PRIO)~OSTCBCur->OSTCBBitX;
-    OS_TRACE_TASK_SUSPENDED(OSTCBCur);
+    y             =  ptcb->OSTCBY;                /* Task no longer ready                              */
+    OSRdyTbl[y]  &= (OS_PRIO)~ptcb->OSTCBBitX;
+    OS_TRACE_TASK_SUSPENDED(ptcb);
     if (OSRdyTbl[y] == 0u) {                      /* Clear event grp bit if this was only task pending */
-        OSRdyGrp &= (OS_PRIO)~OSTCBCur->OSTCBBitY;
+        OSRdyGrp &= (OS_PRIO)~ptcb->OSTCBBitY;
     }
 }
 #endif
@@ -1193,26 +1195,27 @@ void  OS_EventTaskWaitMulti (OS_EVENT **pevents_wait)
 {
     OS_EVENT **pevents;
     OS_EVENT  *pevent;
+    OS_TCB    *ptcb;
     INT8U      y;
 
-
-    OSTCBCur->OSTCBEventMultiPtr = (OS_EVENT **)pevents_wait;       /* Store ptr to ECBs in TCB        */
-    OSTCBCur->OSTCBEventMultiRdy = (OS_EVENT  *)0;
+    ptcb                     = OSTCBCur[OS_CORENUM()];
+    ptcb->OSTCBEventMultiPtr = (OS_EVENT **)pevents_wait;           /* Store ptr to ECBs in TCB        */
+    ptcb->OSTCBEventMultiRdy = (OS_EVENT  *)0;
 
     pevents =  pevents_wait;
     pevent  = *pevents;
     while (pevent != (OS_EVENT *)0) {                               /* Put task in waiting lists       */
-        pevent->OSEventTbl[OSTCBCur->OSTCBY] |= OSTCBCur->OSTCBBitX;
-        pevent->OSEventGrp                   |= OSTCBCur->OSTCBBitY;
+        pevent->OSEventTbl[ptcb->OSTCBY] |= ptcb->OSTCBBitX;
+        pevent->OSEventGrp               |= ptcb->OSTCBBitY;
         pevents++;
         pevent = *pevents;
     }
 
-    y             =  OSTCBCur->OSTCBY;            /* Task no longer ready                              */
-    OSRdyTbl[y]  &= (OS_PRIO)~OSTCBCur->OSTCBBitX;
-    OS_TRACE_TASK_SUSPENDED(OSTCBCur);
+    y             =  ptcb->OSTCBY;                /* Task no longer ready                              */
+    OSRdyTbl[y]  &= (OS_PRIO)~ptcb->OSTCBBitX;
+    OS_TRACE_TASK_SUSPENDED(ptcb);
     if (OSRdyTbl[y] == 0u) {                      /* Clear event grp bit if this was only task pending */
-        OSRdyGrp &= (OS_PRIO)~OSTCBCur->OSTCBBitY;
+        OSRdyGrp &= (OS_PRIO)~ptcb->OSTCBBitY;
     }
 }
 #endif
@@ -1441,11 +1444,13 @@ static  void  OS_InitRdyList (void)
         OSRdyTbl[i] = 0u;
     }
 
-    OSPrioCur     = 0u;
     OSPrioHighRdy = 0u;
-
     OSTCBHighRdy  = (OS_TCB *)0;
-    OSTCBCur      = (OS_TCB *)0;
+
+    for (i = 0u; i < OS_NB_CORES; i++) {
+        OSPrioCur[i]     = 0u;
+        OSTCBCur[i]      = (OS_TCB *)0;
+    }
 }
 
 

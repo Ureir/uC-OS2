@@ -319,6 +319,7 @@ void  *OSMboxPend (OS_EVENT  *pevent,
                    INT8U     *perr)
 {
     void      *pmsg;
+    OS_TCB    *ptcb;
 #if OS_CRITICAL_METHOD == 3u                          /* Allocate storage for CPU status register      */
     OS_CPU_SR  cpu_sr = 0u;
 #endif
@@ -364,16 +365,17 @@ void  *OSMboxPend (OS_EVENT  *pevent,
         OS_TRACE_MBOX_PEND_EXIT(*perr);
         return (pmsg);                                /* Return the message received (or NULL)         */
     }
-    OSTCBCur->OSTCBStat     |= OS_STAT_MBOX;          /* Message not available, task will pend         */
-    OSTCBCur->OSTCBStatPend  = OS_STAT_PEND_OK;
-    OSTCBCur->OSTCBDly       = timeout;               /* Load timeout in TCB                           */
+    ptcb                 = OSTCBCur[OS_CORENUM()];
+    ptcb->OSTCBStat     |= OS_STAT_MBOX;              /* Message not available, task will pend         */
+    ptcb->OSTCBStatPend  = OS_STAT_PEND_OK;
+    ptcb->OSTCBDly       = timeout;                   /* Load timeout in TCB                           */
     OS_EventTaskWait(pevent);                         /* Suspend task until event or timeout occurs    */
     OS_EXIT_CRITICAL();
     OS_Sched();                                       /* Find next highest priority task ready to run  */
     OS_ENTER_CRITICAL();
-    switch (OSTCBCur->OSTCBStatPend) {                /* See if we timed-out or aborted                */
+    switch (ptcb->OSTCBStatPend) {                    /* See if we timed-out or aborted                */
         case OS_STAT_PEND_OK:
-             pmsg =  OSTCBCur->OSTCBMsg;
+             pmsg =  ptcb->OSTCBMsg;
             *perr =  OS_ERR_NONE;
              break;
 
@@ -384,19 +386,19 @@ void  *OSMboxPend (OS_EVENT  *pevent,
 
         case OS_STAT_PEND_TO:
         default:
-             OS_EventTaskRemove(OSTCBCur, pevent);
+             OS_EventTaskRemove(ptcb, pevent);
              pmsg = (void *)0;
             *perr =  OS_ERR_TIMEOUT;                  /* Indicate that we didn't get event within TO   */
              break;
     }
-    OSTCBCur->OSTCBStat          =  OS_STAT_RDY;      /* Set   task  status to ready                   */
-    OSTCBCur->OSTCBStatPend      =  OS_STAT_PEND_OK;  /* Clear pend  status                            */
-    OSTCBCur->OSTCBEventPtr      = (OS_EVENT  *)0;    /* Clear event pointers                          */
+    ptcb->OSTCBStat          =  OS_STAT_RDY;          /* Set   task  status to ready                   */
+    ptcb->OSTCBStatPend      =  OS_STAT_PEND_OK;      /* Clear pend  status                            */
+    ptcb->OSTCBEventPtr      = (OS_EVENT  *)0;        /* Clear event pointers                          */
 #if (OS_EVENT_MULTI_EN > 0u)
-    OSTCBCur->OSTCBEventMultiPtr = (OS_EVENT **)0;
-    OSTCBCur->OSTCBEventMultiRdy = (OS_EVENT  *)0;
+    ptcb->OSTCBEventMultiPtr = (OS_EVENT **)0;
+    ptcb->OSTCBEventMultiRdy = (OS_EVENT  *)0;
 #endif
-    OSTCBCur->OSTCBMsg           = (void      *)0;    /* Clear  received message                       */
+    ptcb->OSTCBMsg           = (void      *)0;        /* Clear  received message                       */
     OS_EXIT_CRITICAL();
     OS_TRACE_MBOX_PEND_EXIT(*perr);
 

@@ -95,7 +95,7 @@ INT8U  OSTaskChangePrio (INT8U  oldprio,
         return (OS_ERR_PRIO_EXIST);
     }
     if (oldprio == OS_PRIO_SELF) {                          /* See if changing self                    */
-        oldprio = OSTCBCur->OSTCBPrio;                      /* Yes, get priority                       */
+        oldprio = OSTCBCur[OS_CORENUM()]->OSTCBPrio;        /* Yes, get priority                       */
     }
     ptcb = OSTCBPrioTbl[oldprio];
     if (ptcb == (OS_TCB *)0) {                              /* Does task to change exist?              */
@@ -482,7 +482,7 @@ INT8U  OSTaskDel (INT8U prio)
 
     OS_ENTER_CRITICAL();
     if (prio == OS_PRIO_SELF) {                         /* See if requesting to delete self            */
-        prio = OSTCBCur->OSTCBPrio;                     /* Set priority to delete to current           */
+        prio = OSTCBCur[OS_CORENUM()]->OSTCBPrio;       /* Set priority to delete to current           */
     }
     ptcb = OSTCBPrioTbl[prio];
     if (ptcb == (OS_TCB *)0) {                          /* Task to delete must exist                   */
@@ -639,7 +639,7 @@ INT8U  OSTaskDelReq (INT8U prio)
 #endif
     if (prio == OS_PRIO_SELF) {                                 /* See if a task is requesting to ...  */
         OS_ENTER_CRITICAL();                                    /* ... this task to delete itself      */
-        stat = OSTCBCur->OSTCBDelReq;                           /* Return request status to caller     */
+        stat = OSTCBCur[OS_CORENUM()]->OSTCBDelReq;             /* Return request status to caller     */
         OS_EXIT_CRITICAL();
         return (stat);
     }
@@ -722,7 +722,7 @@ INT8U  OSTaskNameGet (INT8U    prio,
     }
     OS_ENTER_CRITICAL();
     if (prio == OS_PRIO_SELF) {                          /* See if caller desires it's own name        */
-        prio = OSTCBCur->OSTCBPrio;
+        prio = OSTCBCur[OS_CORENUM()]->OSTCBPrio;
     }
     ptcb = OSTCBPrioTbl[prio];
     if (ptcb == (OS_TCB *)0) {                           /* Does task exist?                           */
@@ -803,7 +803,7 @@ void  OSTaskNameSet (INT8U   prio,
     }
     OS_ENTER_CRITICAL();
     if (prio == OS_PRIO_SELF) {                      /* See if caller desires to set it's own name     */
-        prio = OSTCBCur->OSTCBPrio;
+        prio = OSTCBCur[OS_CORENUM()]->OSTCBPrio;
     }
     ptcb = OSTCBPrioTbl[prio];
     if (ptcb == (OS_TCB *)0) {                       /* Does task exist?                               */
@@ -940,7 +940,7 @@ INT8U  OSTaskStkChk (INT8U         prio,
     p_stk_data->OSUsed = 0u;
     OS_ENTER_CRITICAL();
     if (prio == OS_PRIO_SELF) {                        /* See if check for SELF                        */
-        prio = OSTCBCur->OSTCBPrio;
+        prio = OSTCBCur[OS_CORENUM()]->OSTCBPrio;
     }
     ptcb = OSTCBPrioTbl[prio];
     if (ptcb == (OS_TCB *)0) {                         /* Make sure task exist                         */
@@ -1022,9 +1022,9 @@ INT8U  OSTaskSuspend (INT8U prio)
 #endif
     OS_ENTER_CRITICAL();
     if (prio == OS_PRIO_SELF) {                                 /* See if suspend SELF                 */
-        prio = OSTCBCur->OSTCBPrio;
+        prio = OSTCBCur[OS_CORENUM()]->OSTCBPrio;
         self = OS_TRUE;
-    } else if (prio == OSTCBCur->OSTCBPrio) {                   /* See if suspending self              */
+    } else if (prio == OSTCBCur[OS_CORENUM()]->OSTCBPrio) {     /* See if suspending self              */
         self = OS_TRUE;
     } else {
         self = OS_FALSE;                                        /* No suspending another task          */
@@ -1097,7 +1097,7 @@ INT8U  OSTaskQuery (INT8U    prio,
 #endif
     OS_ENTER_CRITICAL();
     if (prio == OS_PRIO_SELF) {                  /* See if suspend SELF                                */
-        prio = OSTCBCur->OSTCBPrio;
+        prio = OSTCBCur[OS_CORENUM()]->OSTCBPrio;
     }
     ptcb = OSTCBPrioTbl[prio];
     if (ptcb == (OS_TCB *)0) {                   /* Task to query must exist                           */
@@ -1176,7 +1176,7 @@ INT32U  OSTaskRegGet (INT8U   prio,
 #endif
     OS_ENTER_CRITICAL();
     if (prio == OS_PRIO_SELF) {                  /* See if need to get register from current task      */
-        ptcb = OSTCBCur;
+        ptcb = OSTCBCur[OS_CORENUM()];
     } else {
         ptcb = OSTCBPrioTbl[prio];
     }
@@ -1298,7 +1298,7 @@ void  OSTaskRegSet (INT8U    prio,
 #endif
     OS_ENTER_CRITICAL();
     if (prio == OS_PRIO_SELF) {                  /* See if need to get register from current task      */
-        ptcb = OSTCBCur;
+        ptcb = OSTCBCur[OS_CORENUM()];
     } else {
         ptcb = OSTCBPrioTbl[prio];
     }
@@ -1326,7 +1326,7 @@ void  OSTaskRegSet (INT8U    prio,
 
 void  OS_TaskReturn (void)
 {
-    OSTaskReturnHook(OSTCBCur);                   /* Call hook to let user decide on what to do        */
+    OSTaskReturnHook(OSTCBCur[OS_CORENUM()]);     /* Call hook to let user decide on what to do        */
 
 #if OS_TASK_DEL_EN > 0u
     (void)OSTaskDel(OS_PRIO_SELF);                /* Delete task if it accidentally returns!           */

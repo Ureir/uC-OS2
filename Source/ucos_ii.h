@@ -712,8 +712,8 @@ OS_EXT  INT8U             OSIntNesting;             /* Interrupt nesting level  
 
 OS_EXT  INT8U             OSLockNesting;            /* Multitasking lock nesting level                 */
 
-OS_EXT  INT8U             OSPrioCur;                /* Priority of current task                        */
-OS_EXT  INT8U             OSPrioHighRdy;            /* Priority of highest priority task               */
+OS_EXT  INT8U             OSPrioCur[OS_NB_CORES];          /* Priority of current task                 */
+OS_EXT  INT8U             OSPrioHighRdy;                   /* Priority of highest priority task        */
 
 OS_EXT  OS_PRIO           OSRdyGrp;                        /* Ready list group                         */
 OS_EXT  OS_PRIO           OSRdyTbl[OS_RDY_TBL_SIZE];       /* Table of tasks which are ready to run    */
@@ -731,7 +731,7 @@ OS_EXT  BOOLEAN           OSSafetyCriticalStartFlag;
 OS_EXT  OS_STK            OSTaskIdleStk[OS_TASK_IDLE_STK_SIZE];      /* Idle task stack                */
 
 
-OS_EXT  OS_TCB           *OSTCBCur;                        /* Pointer to currently running TCB         */
+OS_EXT  OS_TCB           *OSTCBCur[OS_NB_CORES];           /* Pointer to currently running TCB         */
 OS_EXT  OS_TCB           *OSTCBFreeList;                   /* Pointer to list of free TCBs             */
 OS_EXT  OS_TCB           *OSTCBHighRdy;                    /* Pointer to highest priority TCB R-to-R   */
 OS_EXT  OS_TCB           *OSTCBList;                       /* Pointer to doubly linked list of TCBs    */

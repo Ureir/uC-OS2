@@ -767,17 +767,17 @@ void  OSCtxSw (void)
 #endif
 
 #if (OS_MSG_TRACE > 0u)
-    p_tcb_cur = OSTCBCur;
+    p_tcb_cur = OSTCBCur[OS_CORENUM()];
     p_tcb_new = OSTCBHighRdy;
 #endif
 
 
-    p_stk = (OS_TASK_STK *)OSTCBCur->OSTCBStkPtr;
+    p_stk = (OS_TASK_STK *)OSTCBCur[OS_CORENUM()]->OSTCBStkPtr;
 
     OSTaskSwHook();
 
-    OSTCBCur  = OSTCBHighRdy;
-    OSPrioCur = OSPrioHighRdy;
+    OSTCBCur[OS_CORENUM()]  = OSTCBHighRdy;
+    OSPrioCur[OS_CORENUM()] = OSPrioHighRdy;
 
     if (p_stk->TaskState == STATE_RUNNING) {
         p_stk->TaskState  = STATE_SUSPENDED;
@@ -893,8 +893,8 @@ void  OSIntCtxSw (void)
 {
     OSTaskSwHook();
 
-    OSTCBCur  = OSTCBHighRdy;
-    OSPrioCur = OSPrioHighRdy;
+    OSTCBCur[OS_CORENUM()]  = OSTCBHighRdy;
+    OSPrioCur[OS_CORENUM()] = OSPrioHighRdy;
 }
 
 
@@ -923,7 +923,7 @@ CPU_BOOLEAN  OSIntCurTaskSuspend (void)
     CPU_BOOLEAN   ret;
 
 
-    p_tcb =  OSTCBCur;
+    p_tcb =  OSTCBCur[OS_CORENUM()];
     p_stk = (OS_TASK_STK *)p_tcb->OSTCBStkPtr;
     switch (p_stk->TaskState) {
         case STATE_RUNNING:

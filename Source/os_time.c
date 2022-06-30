@@ -52,6 +52,7 @@
 
 void  OSTimeDly (INT32U ticks)
 {
+    OS_TCB    *ptcb;                                   /* Pointer to current task's TCB                */
     INT8U      y;
 #if OS_CRITICAL_METHOD == 3u                     /* Allocate storage for CPU status register           */
     OS_CPU_SR  cpu_sr = 0u;
@@ -67,13 +68,14 @@ void  OSTimeDly (INT32U ticks)
     }
     if (ticks > 0u) {                            /* 0 means no delay!                                  */
         OS_ENTER_CRITICAL();
-        y            =  OSTCBCur->OSTCBY;        /* Delay current task                                 */
-        OSRdyTbl[y] &= (OS_PRIO)~OSTCBCur->OSTCBBitX;
-        OS_TRACE_TASK_SUSPENDED(OSTCBCur);
+        ptcb         =  OSTCBCur[OS_CORENUM()];
+        y            =  ptcb->OSTCBY;            /* Delay current task                                 */
+        OSRdyTbl[y] &= (OS_PRIO)~ptcb->OSTCBBitX;
+        OS_TRACE_TASK_SUSPENDED(ptcb);
         if (OSRdyTbl[y] == 0u) {
-            OSRdyGrp &= (OS_PRIO)~OSTCBCur->OSTCBBitY;
+            OSRdyGrp &= (OS_PRIO)~ptcb->OSTCBBitY;
         }
-        OSTCBCur->OSTCBDly = ticks;              /* Load ticks in TCB                                  */
+        ptcb->OSTCBDly = ticks;                  /* Load ticks in TCB                                  */
         OS_TRACE_TASK_DLY(ticks);
         OS_EXIT_CRITICAL();
         OS_Sched();                              /* Find next task to run!                             */
