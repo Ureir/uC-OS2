@@ -671,6 +671,21 @@ void  OSIntEnter (void)
     }
 }
 
+INT8S OSFindCore(OS_PRIO HighestPrio)
+{
+#if OS_MULTICORE
+    INT8S core = -1, i;
+
+    for (i = 0 ; i < OS_NB_CORES ; i++) {
+        if (OSPrioCur[i] > HighestPrio) && ((core == -1)||(OSPrioCur[i] > OSPrioCur[core])) {
+            core = i;
+        }
+    }
+    return core;
+#else
+    return (OSPrioCur[0] > HighestPrio)?0:-1;
+#endif
+}
 
 /*
 *********************************************************************************************************
@@ -1706,6 +1721,7 @@ void  OS_MemCopy (INT8U  *pdest,
 
 void  OS_Sched (void)
 {
+    INT8S      core;
 #if OS_CRITICAL_METHOD == 3u                           /* Allocate storage for CPU status register     */
     OS_CPU_SR  cpu_sr = 0u;
 #endif
@@ -1717,7 +1733,8 @@ void  OS_Sched (void)
         if (OSLockNesting == 0u) {                     /* ... scheduler is not locked                  */
             OS_SchedNew();
             OSTCBHighRdy = OSTCBPrioTbl[OSPrioHighRdy];
-            if (OSPrioHighRdy != OSPrioCur) {          /* No Ctx Sw if current task is highest rdy     */
+            core = OSFindCore(OSPrioHighRdy);          /* Find the CPU running the lowest task         */
+            while (core >= 0) {                        /* No Ctx Sw if current tasks are higher        */
 #if OS_TASK_PROFILE_EN > 0u
                 OSTCBHighRdy->OSTCBCtxSwCtr++;         /* Inc. # of context switches to this task      */
 #endif
@@ -1728,8 +1745,11 @@ void  OS_Sched (void)
                 OS_TLS_TaskSw();
 #endif
 #endif
-
-                OS_TASK_SW();                          /* Perform a context switch                     */
+                if (core == OS_CORENUM()) {
+                    OS_TASK_SW();                      /* Perform a context switch                     */
+                } else {
+                    OS_CORE_SW(core);
+                }
             }
         }
     }
